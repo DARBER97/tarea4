@@ -1,0 +1,265 @@
+---
+title: "🌋 Atlas de Actividad Sísmica en América Latina"
+subtitle: <a href="https://www.kaggle.com/datasets">Fuente - Kaggle Earthquakes Dataset</a>
+format: 
+  dashboard:
+    toc: true
+    orientation: columns
+    theme: united
+    nav-buttons: 
+      - reddit
+      - twitter
+      - linkedin
+      - icon: github
+---
+Magnitud de temblores en paises de América y distintos análisis a través de la magnitud y profundidad.
+
+```{r}
+#| label: cargar-bibliotecas
+#| message: false
+#| warning: false
+library(tidyverse)
+library(plotly)
+library(DT)
+library(bslib)
+library(bsicons)
+library(leaflet)
+```
+
+```{r}
+#| label: cargar-datos
+
+terremotos <- read.csv(
+  "terremotos.csv"
+  )
+```
+
+```{r}
+
+
+terremotos <- data.frame(
+  Fecha = as.Date(c("2023-01-15", "2023-02-08", "2023-03-22", "2023-04-10", 
+                    "2023-05-18", "2023-06-03", "2023-07-12", "2023-08-25",
+                    "2023-09-14", "2023-10-07", "2023-11-20", "2023-12-05",
+                    "2024-01-18", "2024-02-29", "2024-03-16")),
+  Magnitud = c(6.2, 7.1, 5.8, 4.5, 6.8, 5.2, 7.4, 4.9, 6.1, 5.6, 3.8, 6.5, 5.1, 7.0, 4.3),
+  Profundidad = c(45, 12, 78, 25, 55, 35, 8, 42, 65, 28, 15, 92, 38, 22, 18),
+  País = c("Chile", "Perú", "México", "Colombia", "Chile", "Ecuador", 
+           "Chile", "Guatemala", "Perú", "Costa Rica", "Venezuela", 
+           "Argentina", "México", "Perú", "El Salvador"),
+  Latitud = c(-33.45, -12.05, 19.43, 4.71, -23.65, -0.18, -18.47, 14.64, -13.16, 9.75, 10.48, -34.61, 16.85, -14.27, 13.79),
+  Longitud = c(-70.66, -77.04, -99.13, -74.07, -70.40, -78.47, -70.31, -90.51, -72.54, -83.75, -66.90, -58.38, -99.91, -75.74, -88.90)
+)
+
+# Limpiar y preparar datos
+terremotos <- terremotos |>
+  filter(!is.na(Magnitud), !is.na(Latitud), !is.na(Longitud)) |>
+  mutate(
+    Año = format(Fecha, "%Y"),
+    Categoria_Magnitud = case_when(
+      Magnitud < 4.0 ~ "Menor (< 4.0)",
+      Magnitud >= 4.0 & Magnitud < 6.0 ~ "Moderado (4.0-5.9)",
+      Magnitud >= 6.0 & Magnitud < 7.0 ~ "Fuerte (6.0-6.9)",
+      Magnitud >= 7.0 ~ "Mayor (≥ 7.0)"
+    ),
+    Color_Categoria = case_when(
+      Magnitud < 4.0 ~ "green",
+      Magnitud >= 4.0 & Magnitud < 6.0 ~ "orange",
+      Magnitud >= 6.0 & Magnitud < 7.0 ~ "red",
+      Magnitud >= 7.0 ~ "darkred"
+    ),
+    Tamaño_Punto = case_when(
+      Magnitud < 4.0 ~ 5,
+      Magnitud >= 4.0 & Magnitud < 6.0 ~ 8,
+      Magnitud >= 6.0 & Magnitud < 7.0 ~ 12,
+      Magnitud >= 7.0 ~ 16
+    )
+  )
+
+# DATOS CLAVE
+magnitud_promedio <- round(mean(terremotos$Magnitud, na.rm = TRUE), 1)
+terremoto_mayor <- terremotos |> slice_max(Magnitud, n = 1)
+pais_mas_activo <- terremotos |> 
+  count(País, sort = TRUE) |> 
+  slice_head(n = 1)
+total_terremotos <- nrow(terremotos)
+```
+
+
+
+## Column {width=50%}
+
+### Row [height=30%]
+
+### Estadísticas Principales
+
+```{r}
+#| title: "📊 Resumen Ejecutivo"
+value_box(
+  title = "Total de Terremotos",
+  value = total_terremotos,
+  showcase = bsicons::bs_icon("globe"),
+  theme = "primary"
+)
+
+value_box(
+  title = "Magnitud Promedio",
+  value = magnitud_promedio,
+  showcase = bsicons::bs_icon("speedometer2"),
+  theme = "success"
+)
+
+value_box(
+  title = paste("Mayor Magnitud:", terremoto_mayor$Magnitud),
+  value = terremoto_mayor$País,
+  showcase = bsicons::bs_icon("exclamation-triangle"),
+  theme = "danger"
+)
+```
+
+### Row [height=70%]
+
+### Mapa de Terremotos
+```{r}
+#| title: "🗺️ Ubicación Geográfica de Terremotos"
+# Crear paleta de colores para el mapa
+colores <- colorFactor(
+  palette = c("green", "orange", "red", "darkred"),
+  domain = terremotos$Color_Categoria
+)
+
+# Crear mapa interactivo
+mapa <- leaflet(terremotos) |>
+  addTiles() |>
+  addCircleMarkers(
+    lng = ~Longitud,
+    lat = ~Latitud,
+    radius = ~Tamaño_Punto,
+    color = ~Color_Categoria,
+    fillColor = ~Color_Categoria,
+    fillOpacity = 0.7,
+    stroke = TRUE,
+    weight = 2,
+    popup = ~paste(
+      "<b>", País, "</b><br>",
+      "Fecha: ", Fecha, "<br>",
+      "Magnitud: ", Magnitud, "<br>",
+      "Profundidad: ", Profundidad, " km<br>",
+      "Categoría: ", Categoria_Magnitud
+    )
+  ) |>
+  addLegend(
+    "bottomright",
+    colors = c("green", "orange", "red", "darkred"),
+    labels = c("Menor (< 4.0)", "Moderado (4.0-5.9)", "Fuerte (6.0-6.9)", "Mayor (≥ 7.0)"),
+    title = "Categoría de Magnitud",
+    opacity = 0.7
+  ) |>
+  setView(lng = -75, lat = -10, zoom = 3)
+
+mapa
+```
+
+## Column {width=50%}
+
+### Row {.tabset}
+```{r}
+#| title: "🏛️ Terremotos por País"
+# Preparar datos para gráfico de barras
+datos_pais <- terremotos |>
+  count(País, name = "Cantidad") |>
+  arrange(desc(Cantidad))
+
+# Crear gráfico interactivo
+p1 <- plot_ly(
+  data = datos_pais,
+  x = ~reorder(País, Cantidad),
+  y = ~Cantidad,
+  type = "bar",
+  marker = list(
+    color = ~Cantidad,
+    colorscale = "Reds",
+    showscale = FALSE
+  ),
+  hovertemplate = "<b>%{x}</b><br>Terremotos: %{y}<extra></extra>"
+) |>
+  layout(
+    title = list(text = "Número de Terremotos por País", font = list(size = 16)),
+    xaxis = list(title = "País", tickangle = -45),
+    yaxis = list(title = "Cantidad de Terremotos"),
+    showlegend = FALSE,
+    margin = list(b = 100)
+  )
+
+p1
+```
+
+```{r}
+#| title: "📈 Profundidad vs Magnitud"
+# Crear gráfico de dispersión
+p2 <- plot_ly(
+  data = terremotos,
+  x = ~Profundidad,
+  y = ~Magnitud,
+  color = ~País,
+  size = ~Magnitud,
+  sizes = c(50, 300),
+  type = "scatter",
+  mode = "markers",
+  hovertemplate = paste(
+    "<b>%{customdata}</b><br>",
+    "Profundidad: %{x} km<br>",
+    "Magnitud: %{y}<br>",
+    "<extra></extra>"
+  ),
+  customdata = ~País
+) |>
+  layout(
+    title = list(text = "Relación entre Profundidad y Magnitud", font = list(size = 16)),
+    xaxis = list(title = "Profundidad (km)"),
+    yaxis = list(title = "Magnitud"),
+    showlegend = TRUE,
+    legend = list(orientation = "h", x = 0, y = -0.2)
+  )
+
+# Agregar línea de tendencia
+fit <- lm(Magnitud ~ Profundidad, data = terremotos)
+terremotos$prediccion <- predict(fit)
+
+p2 <- p2 |>
+  add_lines(
+    data = terremotos,
+    x = ~Profundidad,
+    y = ~prediccion,
+    name = "Tendencia",
+    line = list(color = "black", dash = "dash"),
+    showlegend = TRUE
+  )
+
+p2
+```
+
+### Row
+
+# Crear tabla interactiva
+```{r}
+# Crear tabla interactiva
+tabla_terremotos <- terremotos |>
+  select(Fecha, País, Magnitud, Profundidad, Latitud, Longitud) |>
+  arrange(desc(Magnitud)) |>
+  datatable(
+    rownames = FALSE,
+    colnames = c("Fecha", "País", "Magnitud", "Profundidad (km)", "Latitud", "Longitud"),
+    options = list(
+      dom = 'Bfrtip',
+      pageLength = 10,
+      scrollX = TRUE,
+      language = list(url = '//cdn.datatables.net/plug-ins/1.10.11/i18n/Spanish.json')
+    ),
+    filter = 'top'
+  ) |>
+  formatRound(columns = c("Magnitud", "Profundidad", "Latitud", "Longitud"), digits = 2)
+
+# Mostrar tabla
+tabla_terremotos
+```
